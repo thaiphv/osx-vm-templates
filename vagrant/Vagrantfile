@@ -1,0 +1,138 @@
+#!/usr/bin/ruby
+
+offices = [
+  'sydney',
+  'manila',
+]
+
+# VMs in the Sydney office use dynamic DHCP to allocate IP addresses
+# The MAC address range is defined in T44436#852861
+mac_address_base = '080027FFFF0'
+mac_address_pool_size = 5
+nodes = []
+
+id = 1
+while id <= mac_address_pool_size do
+  mac_address = "#{mac_address_base}#{id}"
+  machine_id = "sydney-#{id}"
+  nodes << {
+    :id => machine_id,
+    :mac => mac_address,
+  }
+  id += 1
+end
+
+# VMs in the Manila office use static IP address configuration. See T44436#951587
+[
+  '10.239.148.41',
+  '10.239.148.42',
+].each_with_index do | ip_address, index |
+  machine_id = "manila-#{index + 1}"
+  nodes << {
+    :id => machine_id,
+    :ip => ip_address,
+  }
+end
+
+# The public key of https://phabricator.tools.flnltd.com/K376
+# It will allow Jenkins master to SSH into the slaves
+public_key = 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC5tSHjvjuWGQufKVt/jwB//LJV92CqCs+YMQ/5kDx+k7+4NNIlKM1PAwGisqAoXtEyCqrJrphAnWehZfobI7v8dx9QYVrDPEnDEWhSnZEgrs+5LLN5g9kfYnlKuf6OOfz1PrEa7MA1R6WkdMj0jUo9iWIpc4KdDDAmfWvkYkj5p60EiiOP9pLqBOQoG1dnKXsjfM39tfYGpf38Z9FaotAROsyqp7/QZGJijnc4rvd1bFxV4AY68hZP36d0Aqbm2Up4zW2LbrqR2iUuB/AIzdQs/q9tcvukOauetqBEZgUws0HFtmKQutOzwW/zX+J3GxOwzglPBde3XksK0F8+A5S1'
+
+Vagrant.configure('2') do |config|
+  nodes.each do |node_info|
+    config.vm.define node_info[:id] do |node|
+      # For some reason, vagrant couldn't set a hostname properly
+      # node.vm.hostname = node_info[:id]
+
+      # Make sure that a Vagrant box has been imported using the name below in
+      # order for this Vagrantfile to work
+      node.vm.box = 'macos_10_13'
+
+      # The bridged Ethernet interface is `en0` on a MacMini 2012. It could differ
+      # on other models but Vagrant will prompt for an interface if the name doesn't
+      # match with the hardcoded value below.
+      if node_info[:mac]
+        node.vm.network 'public_network', bridge: 'en0: Ethernet', mac: node_info[:mac]
+      else
+        node.vm.network 'public_network', bridge: 'en0: Ethernet', ip: node_info[:ip]
+      end
+
+      # Do not mount the share directory as it doesn't work properly on MacOS
+      node.vm.synced_folder '.', '/vagrant', disabled: true
+
+      # The MacOS VM normally takes a bit longer to boot
+      node.vm.boot_timeout = 900
+
+      node.vm.provider 'virtualbox' do |vb|
+        vb.cpus = 2
+        vb.gui = true
+        vb.memory = 4096
+      end
+
+      # Ensure that the bridged interface appears first in the network service list
+      # so that all the outbound traffic goes through that interface
+      node.vm.provision 'shell',
+        inline: <<-SCRIPT
+          networksetup -ordernetworkservices "Ethernet Adaptor (en1)" "Ethernet"
+        SCRIPT
+
+      # This file resource is needed by the `autologin.sh` provisioner following
+      node.vm.provision "file",
+        source: "../scripts/support/set_kcpassword.py",
+        destination: "/private/tmp/set_kcpassword.py"
+
+      # Copy over the Jenkins profile image
+      node.vm.provision "file",
+        source: "../scripts/support/jenkins.png",
+        destination: "/private/tmp/jenkins.png"
+
+      # Create the user that will be used by the Jenkins master to connect to this
+      # slave
+      node.vm.provision 'shell',
+        path: '../scripts/create_jenkins_user.sh',
+        env: {
+          'JENKINS_USER' => ENV['JENKINS_USER'],
+          'JENKINS_PASSWORD' => ENV['JENKINS_PASSWORD'],
+          'JENKINS_PICTURE' => '/private/tmp/jenkins.png',
+          'JENKINS_PUBLIC_KEY' => public_key,
+        }
+
+      # Auto-login to the `jenkins` user
+      node.vm.provision 'shell',
+        path: '../scripts/autologin.sh',
+        env: {
+          'AUTOLOGIN' => 1,
+          'USERNAME' => ENV['JENKINS_USER'],
+          'PASSWORD' => ENV['JENKINS_PASSWORD'],
+        }
+
+      # Install the build tools using homebrew
+      node.vm.provision 'shell',
+        inline: <<-SCRIPT,
+          # XcodeGen cannot be installed with brew until we start using Xcode 9.3
+          #
+          # brew tap yonaskolb/XcodeGen https://github.com/yonaskolb/XcodeGen.git
+          # brew install XcodeGen
+          #
+          # For now, we need to build and install XcodeGen 1.6.0 manually
+          if [ "$(xcversion selected | grep Xcode | cut -d ' ' -f 2)" == "9.3" ]; then
+            git clone https://github.com/yonaskolb/XcodeGen.git
+            cd XcodeGen && git checkout -b 1.6.0 1.6.0 && make
+          else
+            brew tap yonaskolb/XcodeGen https://github.com/yonaskolb/XcodeGen.git
+            brew install XcodeGen
+          fi
+
+        SCRIPT
+        privileged: false
+      node.vm.provision 'shell',
+        inline: <<-SCRIPT
+          systemsetup -setdisplaysleep Never -setcomputersleep Never
+          gem install --force --no-document bundler
+          easy_install pip
+          pip install --upgrade pip
+          pip install virtualenv
+        SCRIPT
+      end
+  end
+end

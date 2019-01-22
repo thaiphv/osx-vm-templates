@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # This script adds a Mac OS Launch Daemon, which runs every time the
 # machine is booted. The daemon will re-detect the attached network

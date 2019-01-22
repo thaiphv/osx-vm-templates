@@ -1,4 +1,5 @@
-#!/bin/sh
+#!/bin/bash
+
 date > /etc/box_build_time
 OSX_VERS=$(sw_vers -productVersion | awk -F "." '{print $2}')
 
@@ -13,7 +14,7 @@ if [ "$INSTALL_VAGRANT_KEYS" = "true" ] || [ "$INSTALL_VAGRANT_KEYS" = "1" ]; th
 	echo "Installing vagrant keys for $USERNAME user"
 	mkdir "/Users/$USERNAME/.ssh"
 	chmod 700 "/Users/$USERNAME/.ssh"
-	curl -L 'https://raw.githubusercontent.com/mitchellh/vagrant/master/keys/vagrant.pub' > "/Users/$USERNAME/.ssh/authorized_keys"
+	curl -L 'https://raw.githubusercontent.com/hashicorp/vagrant/master/keys/vagrant.pub' > "/Users/$USERNAME/.ssh/authorized_keys"
 	chmod 600 "/Users/$USERNAME/.ssh/authorized_keys"
 	chown -R "$USERNAME" "/Users/$USERNAME/.ssh"
 fi

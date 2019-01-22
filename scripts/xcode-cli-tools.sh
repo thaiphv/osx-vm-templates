@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 if [[ ! "$INSTALL_XCODE_CLI_TOOLS" =~ ^(true|yes|on|1|TRUE|YES|ON])$ ]]; then
     exit

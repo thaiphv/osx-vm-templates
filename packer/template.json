@@ -153,9 +153,23 @@
         "USERNAME={{user `username`}}"
       ],
       "type": "shell"
+    },
+    {
+      "execute_command": "chmod +x {{ .Path }}; {{ .Vars }} {{ .Path }}",
+      "scripts": [
+        "../scripts/build_tools.sh"
+      ],
+      "type": "shell",
+      "environment_vars": [
+        "XCODE_INSTALL_USER={{user `apple_dev_username`}}",
+        "XCODE_INSTALL_PASSWORD={{user `apple_dev_password`}}",
+        "XCODE_VERSION={{user `xcode_version`}}"
+      ]
     }
   ],
   "variables": {
+    "apple_dev_username": null,
+    "apple_dev_password": null,
     "autologin": "false",
     "chef_version": "none",
     "facter_version": "none",
@@ -163,6 +177,8 @@
     "install_vagrant_keys": "true",
     "install_xcode_cli_tools": "true",
     "iso_url": "OSX_InstallESD_10.11.1_15B42.dmg",
+    "iso_checksum_type": "none",
+    "iso_checksum": "none",
     "output_directory": "{{env `PACKER_OUTPUT_DIR`}}",
     "password": "vagrant",
     "provisioning_delay": "0",
@@ -170,6 +186,7 @@
     "puppet_agent_version": "none",
     "update_system": "true",
     "username": "vagrant",
-    "vagrant_box_directory": "{{env `PACKER_VAGRANT_BOX_DIR`}}"
+    "vagrant_box_directory": "{{env `PACKER_VAGRANT_BOX_DIR`}}",
+    "xcode_version": null
   }
 }
